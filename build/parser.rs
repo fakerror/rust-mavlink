@@ -1208,6 +1208,13 @@ pub fn parse_profile(
                                             })
                                             .collect(),
                                     );
+
+                                    // Special case for MavMode
+                                    if field.enumtype == Some("MavMode".to_string()) {
+                                        field.enumtype = Some("MavModeFlag".to_string());
+                                        field.display = Some("bitmask".to_string());
+                                    }
+
                                     //field.enumtype = Some(attr.value.clone());
                                 }
                                 b"display" => {
