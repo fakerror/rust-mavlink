@@ -12,6 +12,10 @@
 //! The main type [`AsyncPeekReader`] does not implement [`tokio::io::AsyncBufReadExt`] itself, as there is no added benefit
 //! in doing so.
 //!
+
+#[cfg(doc)]
+use std::io::ErrorKind;
+
 use tokio::io::AsyncReadExt;
 
 use crate::error::MessageReadError;
@@ -53,11 +57,17 @@ impl<R: AsyncReadExt + Unpin, const BUFFER_SIZE: usize> AsyncPeekReader<R, BUFFE
     /// If the internal buffer does not contain enough data, this function will read
     /// from the underlying [`tokio::io::AsyncReadExt`] until it does, an error occurs or no more data can be read (EOF).
     ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
-    ///
     /// This function does not consume data from the buffer, so subsequent calls to `peek` or `read` functions
     /// will still return the peeked data.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`tokio::io::AsyncReadExt`] it is returned
+    /// - If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic when attempting to read more bytes then `BUFFER_SIZE`
     pub async fn peek_exact(&mut self, amount: usize) -> Result<&[u8], MessageReadError> {
         self.fetch(amount, false).await
     }
@@ -67,10 +77,16 @@ impl<R: AsyncReadExt + Unpin, const BUFFER_SIZE: usize> AsyncPeekReader<R, BUFFE
     /// If the internal buffer does not contain enough data, this function will read
     /// from the underlying [`tokio::io::AsyncReadExt`] until it does, an error occurs or no more data can be read (EOF).
     ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
-    ///
     /// This function consumes the data from the buffer, unless an error occurs, in which case no data is consumed.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`tokio::io::AsyncReadExt`] it is returned
+    /// - If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic when attempting to read more bytes then `BUFFER_SIZE`
     pub async fn read_exact(&mut self, amount: usize) -> Result<&[u8], MessageReadError> {
         self.fetch(amount, true).await
     }
@@ -80,10 +96,16 @@ impl<R: AsyncReadExt + Unpin, const BUFFER_SIZE: usize> AsyncPeekReader<R, BUFFE
     /// If the internal buffer does not contain enough data, this function will read
     /// from the underlying [`tokio::io::AsyncReadExt`] until it does, an error occurs or no more data can be read (EOF).
     ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
-    ///
     /// This function consumes the data from the buffer, unless an error occurs, in which case no data is consumed.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`tokio::io::AsyncReadExt`] it is returned
+    /// - If an EOF occurs before a byte could be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic if this `AsyncPeekReader`'s `BUFFER_SIZE` is 0.  
     pub async fn read_u8(&mut self) -> Result<u8, MessageReadError> {
         let buf = self.read_exact(1).await?;
         Ok(buf[0])
@@ -101,14 +123,14 @@ impl<R: AsyncReadExt + Unpin, const BUFFER_SIZE: usize> AsyncPeekReader<R, BUFFE
 
     /// Returns an immutable reference to the underlying [`tokio::io::AsyncRead`]
     ///
-    /// Reading directly from the underlying stream will cause data loss
+    /// Reading directly from the underlying reader will cause data loss
     pub fn reader_ref(&mut self) -> &R {
         &self.reader
     }
 
     /// Returns a mutable reference to the underlying [`tokio::io::AsyncRead`]
     ///
-    /// Reading directly from the underlying stream will cause data loss
+    /// Reading directly from the underlying reader will cause data loss
     pub fn reader_mut(&mut self) -> &mut R {
         &mut self.reader
     }

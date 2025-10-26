@@ -1,32 +1,10 @@
 mod test_shared;
 
-#[cfg(all(feature = "std", feature = "common"))]
+#[cfg(feature = "common")]
 mod test_v2_encode_decode {
+    use crate::test_shared::HEARTBEAT_V2;
     use mavlink_core::peek_reader::PeekReader;
-
-    pub const HEARTBEAT_V2: &[u8] = &[
-        mavlink::MAV_STX_V2, //magic
-        0x09,                //payload len
-        0,                   //incompat flags
-        0,                   //compat flags
-        crate::test_shared::COMMON_MSG_HEADER.sequence,
-        crate::test_shared::COMMON_MSG_HEADER.system_id,
-        crate::test_shared::COMMON_MSG_HEADER.component_id,
-        0x00,
-        0x00,
-        0x00, //msg ID
-        0x05,
-        0x00,
-        0x00,
-        0x00,
-        0x02,
-        0x03,
-        0x59,
-        0x03,
-        0x03, //payload
-        46,
-        115, //checksum
-    ];
+    use mavlink_core::Message;
 
     #[test]
     pub fn test_read_v2_heartbeat() {
@@ -50,7 +28,8 @@ mod test_v2_encode_decode {
 
     #[test]
     pub fn test_write_v2_heartbeat() {
-        let mut v = vec![];
+        let mut b = [0u8; 280];
+        let mut v: &mut [u8] = &mut b;
         let heartbeat_msg = crate::test_shared::get_heartbeat_msg();
         mavlink::write_v2_msg(
             &mut v,
@@ -59,7 +38,7 @@ mod test_v2_encode_decode {
         )
         .expect("Failed to write message");
 
-        assert_eq!(&v[..], HEARTBEAT_V2);
+        assert_eq!(&b[..HEARTBEAT_V2.len()], HEARTBEAT_V2);
     }
 
     /// A COMMAND_LONG message with a truncated payload (allowed for empty fields)
@@ -129,7 +108,7 @@ mod test_v2_encode_decode {
     #[test]
     #[cfg(feature = "emit-extensions")]
     pub fn test_echo_servo_output_raw() {
-        use mavlink::{common, Message};
+        use mavlink::Message;
 
         let mut v = vec![];
         let send_msg = crate::test_shared::get_servo_output_raw_v2();
@@ -171,6 +150,7 @@ mod test_v2_encode_decode {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     pub fn test_read_error() {
         use std::io::ErrorKind;
 
@@ -188,5 +168,56 @@ mod test_v2_encode_decode {
                 Err(err) => panic!("{err}"),
             }
         }
+    }
+
+    const PARAMETER_VALUE_BAT1_R_INTERNAL: &[u8] = &[
+        0xfd, 0x19, 0x00, 0x00, 0x5a, 0x01, 0x01, 0x16, 0x00, 0x00, 0x00, 0x00, 0x80, 0xbf, 0xf5,
+        0x03, 0x04, 0x00, 0x42, 0x41, 0x54, 0x31, 0x5f, 0x52, 0x5f, 0x49, 0x4e, 0x54, 0x45, 0x52,
+        0x4e, 0x41, 0x4c, 0x00, 0x09, 0xd4, 0x14,
+    ];
+
+    const PARAMETER_VALUE_HASH_CHECK: &[u8] = &[
+        0xfd, 0x19, 0x00, 0x00, 0xed, 0x01, 0x01, 0x16, 0x00, 0x00, 0x52, 0x53, 0x89, 0x84, 0xf5,
+        0x03, 0xff, 0xff, 0x5f, 0x48, 0x41, 0x53, 0x48, 0x5f, 0x43, 0x48, 0x45, 0x43, 0x4b, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x05, 0x87, 0x87,
+    ];
+
+    #[test]
+    pub fn test_decode_encode_v2_frame_parameter_value_bat1_r_internal() {
+        let mut r = PeekReader::new(PARAMETER_VALUE_BAT1_R_INTERNAL);
+        let (header, msg) =
+            mavlink::read_v2_msg::<mavlink::common::MavMessage, _>(&mut r).expect("decode");
+
+        let mut buffer = [0; 512];
+        let mut out: &mut [u8] = &mut buffer[..];
+        let len = mavlink::write_v2_msg(&mut out, header, &msg).expect("encode");
+        assert_eq!(&buffer[..len], PARAMETER_VALUE_BAT1_R_INTERNAL);
+    }
+
+    #[test]
+    pub fn test_decode_encode_v2_frame_parameter_value_hash_check() {
+        let mut r = PeekReader::new(PARAMETER_VALUE_HASH_CHECK);
+        let (header, msg) =
+            mavlink::read_v2_msg::<mavlink::common::MavMessage, _>(&mut r).expect("decode");
+
+        let param_value = match msg.clone() {
+            mavlink::common::MavMessage::PARAM_VALUE(param_value) => param_value,
+            _ => panic!(
+                "Expected PARAMETER_VALUE message, got {:?}",
+                msg.message_id()
+            ),
+        };
+
+        let param_id = param_value.param_id.to_str().unwrap();
+        assert_eq!(param_id, "_HASH_CHECK");
+        assert_eq!(
+            param_value.param_type,
+            mavlink::common::MavParamType::MAV_PARAM_TYPE_UINT32
+        );
+
+        let mut buffer = [0; 512];
+        let mut out: &mut [u8] = &mut buffer[..];
+        let len = mavlink::write_v2_msg(&mut out, header, &msg).expect("encode");
+        assert_eq!(&buffer[..len], PARAMETER_VALUE_HASH_CHECK);
     }
 }

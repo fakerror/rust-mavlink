@@ -1,9 +1,15 @@
 //! TCP MAVLink connection
 
-use crate::connectable::TcpConnectable;
+use crate::connection::get_socket_addr;
 use crate::connection::MavConnection;
 use crate::peek_reader::PeekReader;
-use crate::{MavHeader, MavlinkVersion, Message};
+#[cfg(not(feature = "signing"))]
+use crate::read_versioned_raw_message;
+#[cfg(feature = "signing")]
+use crate::read_versioned_raw_message_signed;
+use crate::Connectable;
+use crate::MAVLinkMessageRaw;
+use crate::{MavHeader, MavlinkVersion, Message, ReadVersion};
 use core::ops::DerefMut;
 use std::io;
 use std::net::ToSocketAddrs;
@@ -11,13 +17,15 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use super::{get_socket_addr, Connectable};
-
 #[cfg(not(feature = "signing"))]
 use crate::{read_versioned_msg, write_versioned_msg};
 
 #[cfg(feature = "signing")]
 use crate::{read_versioned_msg_signed, write_versioned_msg_signed, SigningConfig, SigningData};
+
+pub mod config;
+
+use config::{TcpConfig, TcpMode};
 
 pub fn tcpout<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> {
     let addr = get_socket_addr(&address)?;
@@ -32,6 +40,7 @@ pub fn tcpout<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> {
             sequence: 0,
         }),
         protocol_version: MavlinkVersion::V2,
+        recv_any_version: false,
         #[cfg(feature = "signing")]
         signing_data: None,
     })
@@ -52,6 +61,7 @@ pub fn tcpin<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> {
                         sequence: 0,
                     }),
                     protocol_version: MavlinkVersion::V2,
+                    recv_any_version: false,
                     #[cfg(feature = "signing")]
                     signing_data: None,
                 })
@@ -72,6 +82,7 @@ pub struct TcpConnection {
     reader: Mutex<PeekReader<TcpStream>>,
     writer: Mutex<TcpWrite>,
     protocol_version: MavlinkVersion,
+    recv_any_version: bool,
     #[cfg(feature = "signing")]
     signing_data: Option<SigningData>,
 }
@@ -84,14 +95,44 @@ struct TcpWrite {
 impl<M: Message> MavConnection<M> for TcpConnection {
     fn recv(&self) -> Result<(MavHeader, M), crate::error::MessageReadError> {
         let mut reader = self.reader.lock().unwrap();
+        let version = ReadVersion::from_conn_cfg::<_, M>(self);
         #[cfg(not(feature = "signing"))]
-        let result = read_versioned_msg(reader.deref_mut(), self.protocol_version);
+        let result = read_versioned_msg(reader.deref_mut(), version);
         #[cfg(feature = "signing")]
-        let result = read_versioned_msg_signed(
+        let result =
+            read_versioned_msg_signed(reader.deref_mut(), version, self.signing_data.as_ref());
+        result
+    }
+
+    fn recv_raw(&self) -> Result<MAVLinkMessageRaw, crate::error::MessageReadError> {
+        let mut reader = self.reader.lock().unwrap();
+        let version = ReadVersion::from_conn_cfg::<_, M>(self);
+        #[cfg(not(feature = "signing"))]
+        let result = read_versioned_raw_message::<M, _>(reader.deref_mut(), version);
+        #[cfg(feature = "signing")]
+        let result = read_versioned_raw_message_signed::<M, _>(
             reader.deref_mut(),
-            self.protocol_version,
+            version,
             self.signing_data.as_ref(),
         );
+        result
+    }
+
+    fn try_recv(&self) -> Result<(MavHeader, M), crate::error::MessageReadError> {
+        let mut reader = self.reader.lock().unwrap();
+        reader.reader_mut().set_nonblocking(true)?;
+
+        let version = ReadVersion::from_conn_cfg::<_, M>(self);
+
+        #[cfg(not(feature = "signing"))]
+        let result = read_versioned_msg(reader.deref_mut(), version);
+
+        #[cfg(feature = "signing")]
+        let result =
+            read_versioned_msg_signed(reader.deref_mut(), version, self.signing_data.as_ref());
+
+        reader.reader_mut().set_nonblocking(false)?;
+
         result
     }
 
@@ -126,19 +167,27 @@ impl<M: Message> MavConnection<M> for TcpConnection {
         self.protocol_version
     }
 
+    fn set_allow_recv_any_version(&mut self, allow: bool) {
+        self.recv_any_version = allow;
+    }
+
+    fn allow_recv_any_version(&self) -> bool {
+        self.recv_any_version
+    }
+
     #[cfg(feature = "signing")]
     fn setup_signing(&mut self, signing_data: Option<SigningConfig>) {
-        self.signing_data = signing_data.map(SigningData::from_config)
+        self.signing_data = signing_data.map(SigningData::from_config);
     }
 }
 
-impl Connectable for TcpConnectable {
+impl Connectable for TcpConfig {
     fn connect<M: Message>(&self) -> io::Result<Box<dyn MavConnection<M> + Sync + Send>> {
-        let conn = if self.is_out {
-            tcpout(&self.address)
-        } else {
-            tcpin(&self.address)
+        let conn = match self.mode {
+            TcpMode::TcpIn => tcpin(&self.address),
+            TcpMode::TcpOut => tcpout(&self.address),
         };
+
         Ok(Box::new(conn?))
     }
 }

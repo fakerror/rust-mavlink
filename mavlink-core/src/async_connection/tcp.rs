@@ -1,22 +1,26 @@
 //! Async TCP MAVLink connection
 
+use std::io;
+
 use super::{get_socket_addr, AsyncConnectable, AsyncMavConnection};
 use crate::async_peek_reader::AsyncPeekReader;
-use crate::connectable::TcpConnectable;
-use crate::{MavHeader, MavlinkVersion, Message};
+use crate::connection::tcp::config::{TcpConfig, TcpMode};
+use crate::{MAVLinkMessageRaw, MavHeader, MavlinkVersion, Message, ReadVersion};
 
 use async_trait::async_trait;
 use core::ops::DerefMut;
-use tokio::io;
+use futures::lock::Mutex;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex;
 
 #[cfg(not(feature = "signing"))]
-use crate::{read_versioned_msg_async, write_versioned_msg_async};
+use crate::{
+    read_versioned_msg_async, read_versioned_raw_message_async, write_versioned_msg_async,
+};
 #[cfg(feature = "signing")]
 use crate::{
-    read_versioned_msg_async_signed, write_versioned_msg_async_signed, SigningConfig, SigningData,
+    read_versioned_msg_async_signed, read_versioned_raw_message_async_signed,
+    write_versioned_msg_async_signed, SigningConfig, SigningData,
 };
 
 pub async fn tcpout<T: std::net::ToSocketAddrs>(address: T) -> io::Result<AsyncTcpConnection> {
@@ -33,6 +37,7 @@ pub async fn tcpout<T: std::net::ToSocketAddrs>(address: T) -> io::Result<AsyncT
             sequence: 0,
         }),
         protocol_version: MavlinkVersion::V2,
+        recv_any_version: false,
         #[cfg(feature = "signing")]
         signing_data: None,
     })
@@ -53,6 +58,7 @@ pub async fn tcpin<T: std::net::ToSocketAddrs>(address: T) -> io::Result<AsyncTc
                     sequence: 0,
                 }),
                 protocol_version: MavlinkVersion::V2,
+                recv_any_version: false,
                 #[cfg(feature = "signing")]
                 signing_data: None,
             });
@@ -72,6 +78,7 @@ pub struct AsyncTcpConnection {
     reader: Mutex<AsyncPeekReader<OwnedReadHalf>>,
     writer: Mutex<TcpWrite>,
     protocol_version: MavlinkVersion,
+    recv_any_version: bool,
     #[cfg(feature = "signing")]
     signing_data: Option<SigningData>,
 }
@@ -85,12 +92,28 @@ struct TcpWrite {
 impl<M: Message + Sync + Send> AsyncMavConnection<M> for AsyncTcpConnection {
     async fn recv(&self) -> Result<(MavHeader, M), crate::error::MessageReadError> {
         let mut reader = self.reader.lock().await;
+        let version = ReadVersion::from_async_conn_cfg::<_, M>(self);
         #[cfg(not(feature = "signing"))]
-        let result = read_versioned_msg_async(reader.deref_mut(), self.protocol_version).await;
+        let result = read_versioned_msg_async(reader.deref_mut(), version).await;
         #[cfg(feature = "signing")]
         let result = read_versioned_msg_async_signed(
             reader.deref_mut(),
-            self.protocol_version,
+            version,
+            self.signing_data.as_ref(),
+        )
+        .await;
+        result
+    }
+
+    async fn recv_raw(&self) -> Result<MAVLinkMessageRaw, crate::error::MessageReadError> {
+        let mut reader = self.reader.lock().await;
+        let version = ReadVersion::from_async_conn_cfg::<_, M>(self);
+        #[cfg(not(feature = "signing"))]
+        let result = read_versioned_raw_message_async::<M, _>(reader.deref_mut(), version).await;
+        #[cfg(feature = "signing")]
+        let result = read_versioned_raw_message_async_signed::<M, _>(
+            reader.deref_mut(),
+            version,
             self.signing_data.as_ref(),
         )
         .await;
@@ -130,27 +153,35 @@ impl<M: Message + Sync + Send> AsyncMavConnection<M> for AsyncTcpConnection {
         self.protocol_version = version;
     }
 
-    fn get_protocol_version(&self) -> MavlinkVersion {
+    fn protocol_version(&self) -> MavlinkVersion {
         self.protocol_version
+    }
+
+    fn set_allow_recv_any_version(&mut self, allow: bool) {
+        self.recv_any_version = allow;
+    }
+
+    fn allow_recv_any_version(&self) -> bool {
+        self.recv_any_version
     }
 
     #[cfg(feature = "signing")]
     fn setup_signing(&mut self, signing_data: Option<SigningConfig>) {
-        self.signing_data = signing_data.map(SigningData::from_config)
+        self.signing_data = signing_data.map(SigningData::from_config);
     }
 }
 
 #[async_trait]
-impl AsyncConnectable for TcpConnectable {
+impl AsyncConnectable for TcpConfig {
     async fn connect_async<M>(&self) -> io::Result<Box<dyn AsyncMavConnection<M> + Sync + Send>>
     where
         M: Message + Sync + Send,
     {
-        let conn = if self.is_out {
-            tcpout(&self.address).await
-        } else {
-            tcpin(&self.address).await
+        let conn = match self.mode {
+            TcpMode::TcpIn => tcpin(&self.address).await,
+            TcpMode::TcpOut => tcpout(&self.address).await,
         };
+
         Ok(Box::new(conn?))
     }
 }

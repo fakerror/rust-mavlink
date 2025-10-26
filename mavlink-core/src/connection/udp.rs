@@ -1,23 +1,30 @@
 //! UDP MAVLink connection
 
-use std::collections::VecDeque;
-
-use crate::connectable::{UdpConnectable, UdpMode};
+use crate::connection::get_socket_addr;
 use crate::connection::MavConnection;
 use crate::peek_reader::PeekReader;
-use crate::{MavHeader, MavlinkVersion, Message};
+#[cfg(not(feature = "signing"))]
+use crate::read_versioned_raw_message;
+#[cfg(feature = "signing")]
+use crate::read_versioned_raw_message_signed;
+use crate::Connectable;
+use crate::MAVLinkMessageRaw;
+use crate::{MavHeader, MavlinkVersion, Message, ReadVersion};
 use core::ops::DerefMut;
+use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::Mutex;
-
-use super::{get_socket_addr, Connectable};
 
 #[cfg(not(feature = "signing"))]
 use crate::{read_versioned_msg, write_versioned_msg};
 
 #[cfg(feature = "signing")]
 use crate::{read_versioned_msg_signed, write_versioned_msg_signed, SigningConfig, SigningData};
+
+pub mod config;
+
+use config::{UdpConfig, UdpMode};
 
 struct UdpRead {
     socket: UdpSocket,
@@ -52,6 +59,7 @@ pub struct UdpConnection {
     reader: Mutex<PeekReader<UdpRead>>,
     writer: Mutex<UdpWrite>,
     protocol_version: MavlinkVersion,
+    recv_any_version: bool,
     server: bool,
     #[cfg(feature = "signing")]
     signing_data: Option<SigningData>,
@@ -72,6 +80,7 @@ impl UdpConnection {
                 sequence: 0,
             }),
             protocol_version: MavlinkVersion::V2,
+            recv_any_version: false,
             #[cfg(feature = "signing")]
             signing_data: None,
         })
@@ -83,12 +92,34 @@ impl<M: Message> MavConnection<M> for UdpConnection {
         let mut reader = self.reader.lock().unwrap();
 
         loop {
+            let version = ReadVersion::from_conn_cfg::<_, M>(self);
             #[cfg(not(feature = "signing"))]
-            let result = read_versioned_msg(reader.deref_mut(), self.protocol_version);
+            let result = read_versioned_msg(reader.deref_mut(), version);
             #[cfg(feature = "signing")]
-            let result = read_versioned_msg_signed(
+            let result =
+                read_versioned_msg_signed(reader.deref_mut(), version, self.signing_data.as_ref());
+            if self.server {
+                if let addr @ Some(_) = reader.reader_ref().last_recv_address {
+                    self.writer.lock().unwrap().dest = addr;
+                }
+            }
+            if let ok @ Ok(..) = result {
+                return ok;
+            }
+        }
+    }
+
+    fn recv_raw(&self) -> Result<MAVLinkMessageRaw, crate::error::MessageReadError> {
+        let mut reader = self.reader.lock().unwrap();
+
+        loop {
+            let version = ReadVersion::from_conn_cfg::<_, M>(self);
+            #[cfg(not(feature = "signing"))]
+            let result = read_versioned_raw_message::<M, _>(reader.deref_mut(), version);
+            #[cfg(feature = "signing")]
+            let result = read_versioned_raw_message_signed::<M, _>(
                 reader.deref_mut(),
-                self.protocol_version,
+                version,
                 self.signing_data.as_ref(),
             );
             if self.server {
@@ -100,6 +131,29 @@ impl<M: Message> MavConnection<M> for UdpConnection {
                 return ok;
             }
         }
+    }
+
+    fn try_recv(&self) -> Result<(MavHeader, M), crate::error::MessageReadError> {
+        let mut reader = self.reader.lock().unwrap();
+        reader.reader_mut().socket.set_nonblocking(true)?;
+
+        let version = ReadVersion::from_conn_cfg::<_, M>(self);
+
+        #[cfg(not(feature = "signing"))]
+        let result = read_versioned_msg(reader.deref_mut(), version);
+        #[cfg(feature = "signing")]
+        let result =
+            read_versioned_msg_signed(reader.deref_mut(), version, self.signing_data.as_ref());
+
+        if self.server {
+            if let addr @ Some(_) = reader.reader_ref().last_recv_address {
+                self.writer.lock().unwrap().dest = addr;
+            }
+        }
+
+        reader.reader_mut().socket.set_nonblocking(false)?;
+
+        result
     }
 
     fn send(&self, header: &MavHeader, data: &M) -> Result<usize, crate::error::MessageWriteError> {
@@ -142,13 +196,21 @@ impl<M: Message> MavConnection<M> for UdpConnection {
         self.protocol_version
     }
 
+    fn set_allow_recv_any_version(&mut self, allow: bool) {
+        self.recv_any_version = allow;
+    }
+
+    fn allow_recv_any_version(&self) -> bool {
+        self.recv_any_version
+    }
+
     #[cfg(feature = "signing")]
     fn setup_signing(&mut self, signing_data: Option<SigningConfig>) {
-        self.signing_data = signing_data.map(SigningData::from_config)
+        self.signing_data = signing_data.map(SigningData::from_config);
     }
 }
 
-impl Connectable for UdpConnectable {
+impl Connectable for UdpConfig {
     fn connect<M: Message>(&self) -> io::Result<Box<dyn MavConnection<M> + Sync + Send>> {
         let (addr, server, dest): (&str, _, _) = match self.mode {
             UdpMode::Udpin => (&self.address, true, None),

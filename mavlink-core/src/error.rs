@@ -2,10 +2,14 @@ use core::fmt::{Display, Formatter};
 #[cfg(feature = "std")]
 use std::error::Error;
 
+/// Error while parsing a MAVLink message
 #[derive(Debug)]
 pub enum ParserError {
-    InvalidFlag { flag_type: &'static str, value: u32 },
-    InvalidEnum { enum_type: &'static str, value: u32 },
+    /// Bit flag for this type is invalid
+    InvalidFlag { flag_type: &'static str, value: u64 },
+    /// Enum value for this enum type does not exist
+    InvalidEnum { enum_type: &'static str, value: u64 },
+    /// Message ID does not exist in this message set
     UnknownMessage { id: u32 },
 }
 
@@ -28,12 +32,16 @@ impl Display for ParserError {
 #[cfg(feature = "std")]
 impl Error for ParserError {}
 
+/// Error while reading and parsing a MAVLink message
 #[derive(Debug)]
 pub enum MessageReadError {
+    /// IO Error while reading
     #[cfg(feature = "std")]
     Io(std::io::Error),
+    /// IO Error while reading
     #[cfg(any(feature = "embedded", feature = "embedded-hal-02"))]
     Io,
+    /// Error while parsing
     Parse(ParserError),
 }
 
@@ -74,12 +82,17 @@ impl From<ParserError> for MessageReadError {
     }
 }
 
+/// Error while writing a MAVLink message
 #[derive(Debug)]
 pub enum MessageWriteError {
+    /// IO Error while writing
     #[cfg(feature = "std")]
     Io(std::io::Error),
+    /// IO Error while writing
     #[cfg(any(feature = "embedded", feature = "embedded-hal-02"))]
     Io,
+    /// Message does not support MAVLink 1
+    MAVLink2Only,
 }
 
 impl Display for MessageWriteError {
@@ -89,6 +102,7 @@ impl Display for MessageWriteError {
             Self::Io(e) => write!(f, "Failed to write message: {e:#?}"),
             #[cfg(any(feature = "embedded", feature = "embedded-hal-02"))]
             Self::Io => write!(f, "Failed to write message"),
+            Self::MAVLink2Only => write!(f, "Message is not supported in MAVLink 1"),
         }
     }
 }

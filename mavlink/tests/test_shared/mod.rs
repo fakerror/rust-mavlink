@@ -12,6 +12,50 @@ pub const SECRET_KEY: [u8; 32] = [
     0x22, 0x42, 0x00, 0xcc, 0xff, 0x7a, 0x00, 0x52, 0x75, 0x73, 0x74, 0x00, 0x4d, 0x41, 0x56, 0xb3,
 ];
 
+pub const HEARTBEAT_V1: &[u8] = &[
+    mavlink::MAV_STX,
+    0x09,
+    crate::test_shared::COMMON_MSG_HEADER.sequence,
+    crate::test_shared::COMMON_MSG_HEADER.system_id,
+    crate::test_shared::COMMON_MSG_HEADER.component_id,
+    0x00, //msg ID
+    0x05, //payload
+    0x00,
+    0x00,
+    0x00,
+    0x02,
+    0x03,
+    0x59,
+    0x03,
+    0x03,
+    0x1f, //checksum
+    0x50,
+];
+
+pub const HEARTBEAT_V2: &[u8] = &[
+    mavlink::MAV_STX_V2, //magic
+    0x09,                //payload len
+    0,                   //incompat flags
+    0,                   //compat flags
+    crate::test_shared::COMMON_MSG_HEADER.sequence,
+    crate::test_shared::COMMON_MSG_HEADER.system_id,
+    crate::test_shared::COMMON_MSG_HEADER.component_id,
+    0x00, //msg ID
+    0x00,
+    0x00,
+    0x05, //payload
+    0x00,
+    0x00,
+    0x00,
+    0x02,
+    0x03,
+    0x59,
+    0x03,
+    0x03,
+    46, //checksum
+    115,
+];
+
 #[cfg(feature = "common")]
 pub fn get_heartbeat_msg() -> mavlink::common::HEARTBEAT_DATA {
     mavlink::common::HEARTBEAT_DATA {
@@ -50,7 +94,7 @@ pub fn get_cmd_nav_takeoff_msg() -> mavlink::common::COMMAND_INT_DATA {
 pub fn get_hil_actuator_controls_msg() -> mavlink::common::HIL_ACTUATOR_CONTROLS_DATA {
     mavlink::common::HIL_ACTUATOR_CONTROLS_DATA {
         time_usec: 1234567_u64,
-        flags: 0_u64,
+        flags: mavlink::common::HilActuatorControlsFlags::empty(),
         controls: [
             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
         ],
@@ -100,7 +144,7 @@ pub fn get_servo_output_raw_v2() -> mavlink::common::SERVO_OUTPUT_RAW_DATA {
     }
 }
 
-#[cfg(all(feature = "ardupilotmega", feature = "uavionix", feature = "icarous"))]
+#[cfg(feature = "ardupilotmega")]
 pub fn get_apm_mount_status() -> mavlink::ardupilotmega::MOUNT_STATUS_DATA {
     mavlink::ardupilotmega::MOUNT_STATUS_DATA {
         pointing_a: 3,
@@ -108,6 +152,8 @@ pub fn get_apm_mount_status() -> mavlink::ardupilotmega::MOUNT_STATUS_DATA {
         pointing_c: 5,
         target_system: 2,
         target_component: 3,
+        #[cfg(feature = "emit-extensions")]
+        mount_mode: mavlink::ardupilotmega::MavMountMode::MAV_MOUNT_MODE_HOME_LOCATION,
     }
 }
 
@@ -145,4 +191,135 @@ impl<'a> std::io::Read for BlockyReader<'a> {
             Ok(1)
         }
     }
+}
+
+#[macro_export]
+macro_rules! for_all_dialects {
+    ($function:ident $(, $args:expr)* $(,)?) => {
+        #[cfg(feature = "ardupilotmega")]
+        {
+            use ::mavlink::ardupilotmega::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "asluav")]
+        {
+            use ::mavlink::asluav::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "avssuas")]
+        {
+            use ::mavlink::avssuas::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "development")]
+        {
+            use ::mavlink::development::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "matrixpilot")]
+        {
+            use ::mavlink::matrixpilot::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "minimal")]
+        {
+            use ::mavlink::minimal::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "paparazzi")]
+        {
+            use ::mavlink::paparazzi::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "python_array_test")]
+        {
+            use ::mavlink::python_array_test::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "standard")]
+        {
+            use ::mavlink::standard::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "test")]
+        {
+            use ::mavlink::test::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "ualberta")]
+        {
+            use ::mavlink::ualberta::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "uavionix")]
+        {
+            use ::mavlink::uavionix::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "icarous")]
+        {
+            use ::mavlink::icarous::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "common")]
+        {
+            use ::mavlink::common::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "cubepilot")]
+        {
+            use ::mavlink::cubepilot::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "storm32")]
+        {
+            use ::mavlink::storm32::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "csairlink")]
+        {
+            use ::mavlink::csairlink::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+
+        #[cfg(feature = "loweheiser")]
+        {
+            use ::mavlink::loweheiser::MavMessage;
+
+            $function::<MavMessage, _>(MavMessage::all_ids(), $($args), *);
+        }
+    };
 }

@@ -1,0 +1,584 @@
+---
+source: mavlink-bindgen/tests/e2e_snapshots.rs
+expression: contents
+---
+#![doc = "MAVLink parameters dialect."]
+#![doc = ""]
+#![doc = "This file was automatically generated, do not edit."]
+#![allow(deprecated)]
+#[cfg(feature = "arbitrary")]
+use arbitrary::Arbitrary;
+#[allow(unused_imports)]
+use bitflags::{bitflags, Flags};
+use mavlink_core::{
+    bytes::Bytes, bytes_mut::BytesMut, types::CharArray, MavlinkVersion, Message, MessageData,
+};
+#[allow(unused_imports)]
+use num_derive::FromPrimitive;
+#[allow(unused_imports)]
+use num_derive::ToPrimitive;
+#[allow(unused_imports)]
+use num_traits::FromPrimitive;
+#[allow(unused_imports)]
+use num_traits::ToPrimitive;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
+use ts_rs::TS;
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Copy, Clone, PartialEq, FromPrimitive, ToPrimitive)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type"))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[repr(u32)]
+#[doc = "Specifies the datatype of a MAVLink parameter."]
+pub enum MavParamType {
+    #[doc = "8-bit unsigned integer"]
+    MAV_PARAM_TYPE_UINT8 = 1,
+    #[doc = "8-bit signed integer"]
+    MAV_PARAM_TYPE_INT8 = 2,
+    #[doc = "16-bit unsigned integer"]
+    MAV_PARAM_TYPE_UINT16 = 3,
+    #[doc = "16-bit signed integer"]
+    MAV_PARAM_TYPE_INT16 = 4,
+    #[doc = "32-bit unsigned integer"]
+    MAV_PARAM_TYPE_UINT32 = 5,
+    #[doc = "32-bit signed integer"]
+    MAV_PARAM_TYPE_INT32 = 6,
+    #[doc = "64-bit unsigned integer"]
+    MAV_PARAM_TYPE_UINT64 = 7,
+    #[doc = "64-bit signed integer"]
+    MAV_PARAM_TYPE_INT64 = 8,
+    #[doc = "32-bit floating-point"]
+    MAV_PARAM_TYPE_REAL32 = 9,
+    #[doc = "64-bit floating-point"]
+    MAV_PARAM_TYPE_REAL64 = 10,
+}
+impl MavParamType {
+    pub const DEFAULT: Self = Self::MAV_PARAM_TYPE_UINT8;
+}
+impl Default for MavParamType {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+#[doc = "Request all parameters of this component. After this request, all                 parameters                 are emitted. The parameter microservice is documented at                 <https://mavlink.io/en/services/parameter.html>."]
+#[doc = ""]
+#[doc = "ID: 21"]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct PARAM_REQUEST_LIST_DATA {
+    #[doc = "System ID"]
+    pub target_system: u8,
+    #[doc = "Component ID"]
+    pub target_component: u8,
+}
+impl PARAM_REQUEST_LIST_DATA {
+    pub const ENCODED_LEN: usize = 2usize;
+    pub const DEFAULT: Self = Self {
+        target_system: 0_u8,
+        target_component: 0_u8,
+    };
+    #[cfg(feature = "arbitrary")]
+    pub fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        use arbitrary::{Arbitrary, Unstructured};
+        let mut buf = [0u8; 1024];
+        rng.fill_bytes(&mut buf);
+        let mut unstructured = Unstructured::new(&buf);
+        Self::arbitrary(&mut unstructured).unwrap_or_default()
+    }
+}
+impl Default for PARAM_REQUEST_LIST_DATA {
+    fn default() -> Self {
+        Self::DEFAULT.clone()
+    }
+}
+impl MessageData for PARAM_REQUEST_LIST_DATA {
+    type Message = MavMessage;
+    const ID: u32 = 21u32;
+    const NAME: &'static str = "PARAM_REQUEST_LIST";
+    const EXTRA_CRC: u8 = 159u8;
+    const ENCODED_LEN: usize = 2usize;
+    fn deser(
+        _version: MavlinkVersion,
+        __input: &[u8],
+    ) -> Result<Self, ::mavlink_core::error::ParserError> {
+        let avail_len = __input.len();
+        let mut payload_buf = [0; Self::ENCODED_LEN];
+        let mut buf = if avail_len < Self::ENCODED_LEN {
+            payload_buf[0..avail_len].copy_from_slice(__input);
+            Bytes::new(&payload_buf)
+        } else {
+            Bytes::new(__input)
+        };
+        let mut __struct = Self::default();
+        __struct.target_system = buf.get_u8();
+        __struct.target_component = buf.get_u8();
+        Ok(__struct)
+    }
+    fn ser(&self, version: MavlinkVersion, bytes: &mut [u8]) -> usize {
+        let mut __tmp = BytesMut::new(bytes);
+        #[allow(clippy::absurd_extreme_comparisons)]
+        #[allow(unused_comparisons)]
+        if __tmp.remaining() < Self::ENCODED_LEN {
+            panic!(
+                "buffer is too small (need {} bytes, but got {})",
+                Self::ENCODED_LEN,
+                __tmp.remaining(),
+            )
+        }
+        __tmp.put_u8(self.target_system);
+        __tmp.put_u8(self.target_component);
+        if matches!(version, MavlinkVersion::V2) {
+            let len = __tmp.len();
+            ::mavlink_core::utils::remove_trailing_zeroes(&bytes[..len])
+        } else {
+            __tmp.len()
+        }
+    }
+}
+#[doc = "value[float]. This allows to send a                 parameter to any other component (such as the GCS) without the need of previous                 knowledge of possible parameter names. Thus the same GCS can store different                 parameters                 for different autopilots. See also <https://mavlink.io/en/services/parameter.html> for                 a                 full documentation of QGroundControl and IMU code."]
+#[doc = ""]
+#[doc = "ID: 20"]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct PARAM_REQUEST_READ_DATA {
+    #[doc = "Parameter index. Send -1 to use                 the                 param ID field as identifier (else the param id will be ignored)"]
+    pub param_index: i16,
+    #[doc = "System ID"]
+    pub target_system: u8,
+    #[doc = "Component ID"]
+    pub target_component: u8,
+    #[doc = "Onboard parameter id, terminated by NULL if the                 length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte                 if                 the length is exactly 16 chars - applications have to provide 16+1 bytes storage if                 the                 ID is stored as string"]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub param_id: CharArray<16>,
+}
+impl PARAM_REQUEST_READ_DATA {
+    pub const ENCODED_LEN: usize = 20usize;
+    pub const DEFAULT: Self = Self {
+        param_index: 0_i16,
+        target_system: 0_u8,
+        target_component: 0_u8,
+        param_id: CharArray::new([0_u8; 16usize]),
+    };
+    #[cfg(feature = "arbitrary")]
+    pub fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        use arbitrary::{Arbitrary, Unstructured};
+        let mut buf = [0u8; 1024];
+        rng.fill_bytes(&mut buf);
+        let mut unstructured = Unstructured::new(&buf);
+        Self::arbitrary(&mut unstructured).unwrap_or_default()
+    }
+}
+impl Default for PARAM_REQUEST_READ_DATA {
+    fn default() -> Self {
+        Self::DEFAULT.clone()
+    }
+}
+impl MessageData for PARAM_REQUEST_READ_DATA {
+    type Message = MavMessage;
+    const ID: u32 = 20u32;
+    const NAME: &'static str = "PARAM_REQUEST_READ";
+    const EXTRA_CRC: u8 = 214u8;
+    const ENCODED_LEN: usize = 20usize;
+    fn deser(
+        _version: MavlinkVersion,
+        __input: &[u8],
+    ) -> Result<Self, ::mavlink_core::error::ParserError> {
+        let avail_len = __input.len();
+        let mut payload_buf = [0; Self::ENCODED_LEN];
+        let mut buf = if avail_len < Self::ENCODED_LEN {
+            payload_buf[0..avail_len].copy_from_slice(__input);
+            Bytes::new(&payload_buf)
+        } else {
+            Bytes::new(__input)
+        };
+        let mut __struct = Self::default();
+        __struct.param_index = buf.get_i16_le();
+        __struct.target_system = buf.get_u8();
+        __struct.target_component = buf.get_u8();
+        let mut tmp = [0_u8; 16usize];
+        for v in &mut tmp {
+            *v = buf.get_u8();
+        }
+        __struct.param_id = CharArray::new(tmp);
+        Ok(__struct)
+    }
+    fn ser(&self, version: MavlinkVersion, bytes: &mut [u8]) -> usize {
+        let mut __tmp = BytesMut::new(bytes);
+        #[allow(clippy::absurd_extreme_comparisons)]
+        #[allow(unused_comparisons)]
+        if __tmp.remaining() < Self::ENCODED_LEN {
+            panic!(
+                "buffer is too small (need {} bytes, but got {})",
+                Self::ENCODED_LEN,
+                __tmp.remaining(),
+            )
+        }
+        __tmp.put_i16_le(self.param_index);
+        __tmp.put_u8(self.target_system);
+        __tmp.put_u8(self.target_component);
+        for val in &self.param_id {
+            __tmp.put_u8(*val);
+        }
+        if matches!(version, MavlinkVersion::V2) {
+            let len = __tmp.len();
+            ::mavlink_core::utils::remove_trailing_zeroes(&bytes[..len])
+        } else {
+            __tmp.len()
+        }
+    }
+}
+#[doc = "Set a parameter value (write new value to permanent storage).                 The receiving component should acknowledge the new parameter value by broadcasting a                 PARAM_VALUE message (broadcasting ensures that multiple GCS all have an up-to-date                 list                 of all parameters). If the sending GCS did not receive a PARAM_VALUE within its                 timeout                 time, it should re-send the PARAM_SET message. The parameter microservice is                 documented                 at <https://mavlink.io/en/services/parameter.html>."]
+#[doc = ""]
+#[doc = "ID: 23"]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct PARAM_SET_DATA {
+    #[doc = "Onboard parameter value"]
+    pub param_value: f32,
+    #[doc = "System ID"]
+    pub target_system: u8,
+    #[doc = "Component ID"]
+    pub target_component: u8,
+    #[doc = "Onboard parameter id, terminated by NULL if the                 length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte                 if                 the length is exactly 16 chars - applications have to provide 16+1 bytes storage if                 the                 ID is stored as string"]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub param_id: CharArray<16>,
+    #[doc = "Onboard parameter type."]
+    pub param_type: MavParamType,
+}
+impl PARAM_SET_DATA {
+    pub const ENCODED_LEN: usize = 23usize;
+    pub const DEFAULT: Self = Self {
+        param_value: 0.0_f32,
+        target_system: 0_u8,
+        target_component: 0_u8,
+        param_id: CharArray::new([0_u8; 16usize]),
+        param_type: MavParamType::DEFAULT,
+    };
+    #[cfg(feature = "arbitrary")]
+    pub fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        use arbitrary::{Arbitrary, Unstructured};
+        let mut buf = [0u8; 1024];
+        rng.fill_bytes(&mut buf);
+        let mut unstructured = Unstructured::new(&buf);
+        Self::arbitrary(&mut unstructured).unwrap_or_default()
+    }
+}
+impl Default for PARAM_SET_DATA {
+    fn default() -> Self {
+        Self::DEFAULT.clone()
+    }
+}
+impl MessageData for PARAM_SET_DATA {
+    type Message = MavMessage;
+    const ID: u32 = 23u32;
+    const NAME: &'static str = "PARAM_SET";
+    const EXTRA_CRC: u8 = 168u8;
+    const ENCODED_LEN: usize = 23usize;
+    fn deser(
+        _version: MavlinkVersion,
+        __input: &[u8],
+    ) -> Result<Self, ::mavlink_core::error::ParserError> {
+        let avail_len = __input.len();
+        let mut payload_buf = [0; Self::ENCODED_LEN];
+        let mut buf = if avail_len < Self::ENCODED_LEN {
+            payload_buf[0..avail_len].copy_from_slice(__input);
+            Bytes::new(&payload_buf)
+        } else {
+            Bytes::new(__input)
+        };
+        let mut __struct = Self::default();
+        __struct.param_value = buf.get_f32_le();
+        __struct.target_system = buf.get_u8();
+        __struct.target_component = buf.get_u8();
+        let mut tmp = [0_u8; 16usize];
+        for v in &mut tmp {
+            *v = buf.get_u8();
+        }
+        __struct.param_id = CharArray::new(tmp);
+        let tmp = buf.get_u8();
+        __struct.param_type =
+            FromPrimitive::from_u8(tmp).ok_or(::mavlink_core::error::ParserError::InvalidEnum {
+                enum_type: "MavParamType",
+                value: tmp as u64,
+            })?;
+        Ok(__struct)
+    }
+    fn ser(&self, version: MavlinkVersion, bytes: &mut [u8]) -> usize {
+        let mut __tmp = BytesMut::new(bytes);
+        #[allow(clippy::absurd_extreme_comparisons)]
+        #[allow(unused_comparisons)]
+        if __tmp.remaining() < Self::ENCODED_LEN {
+            panic!(
+                "buffer is too small (need {} bytes, but got {})",
+                Self::ENCODED_LEN,
+                __tmp.remaining(),
+            )
+        }
+        __tmp.put_f32_le(self.param_value);
+        __tmp.put_u8(self.target_system);
+        __tmp.put_u8(self.target_component);
+        for val in &self.param_id {
+            __tmp.put_u8(*val);
+        }
+        __tmp.put_u8(self.param_type as u8);
+        if matches!(version, MavlinkVersion::V2) {
+            let len = __tmp.len();
+            ::mavlink_core::utils::remove_trailing_zeroes(&bytes[..len])
+        } else {
+            __tmp.len()
+        }
+    }
+}
+#[doc = "Emit the value of a onboard parameter. The inclusion of param_count and                 param_index in the message allows the recipient to keep track of received parameters                 and                 allows him to re-request missing parameters after a loss or timeout. The parameter                 microservice is documented at <https://mavlink.io/en/services/parameter.html>."]
+#[doc = ""]
+#[doc = "ID: 22"]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct PARAM_VALUE_DATA {
+    #[doc = "Onboard parameter value"]
+    pub param_value: f32,
+    #[doc = "Total number of onboard parameters"]
+    pub param_count: u16,
+    #[doc = "Index of this onboard parameter"]
+    pub param_index: u16,
+    #[doc = "Onboard parameter id, terminated by NULL if the                 length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte                 if                 the length is exactly 16 chars - applications have to provide 16+1 bytes storage if                 the                 ID is stored as string"]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub param_id: CharArray<16>,
+    #[doc = "Onboard parameter type."]
+    pub param_type: MavParamType,
+}
+impl PARAM_VALUE_DATA {
+    pub const ENCODED_LEN: usize = 25usize;
+    pub const DEFAULT: Self = Self {
+        param_value: 0.0_f32,
+        param_count: 0_u16,
+        param_index: 0_u16,
+        param_id: CharArray::new([0_u8; 16usize]),
+        param_type: MavParamType::DEFAULT,
+    };
+    #[cfg(feature = "arbitrary")]
+    pub fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        use arbitrary::{Arbitrary, Unstructured};
+        let mut buf = [0u8; 1024];
+        rng.fill_bytes(&mut buf);
+        let mut unstructured = Unstructured::new(&buf);
+        Self::arbitrary(&mut unstructured).unwrap_or_default()
+    }
+}
+impl Default for PARAM_VALUE_DATA {
+    fn default() -> Self {
+        Self::DEFAULT.clone()
+    }
+}
+impl MessageData for PARAM_VALUE_DATA {
+    type Message = MavMessage;
+    const ID: u32 = 22u32;
+    const NAME: &'static str = "PARAM_VALUE";
+    const EXTRA_CRC: u8 = 220u8;
+    const ENCODED_LEN: usize = 25usize;
+    fn deser(
+        _version: MavlinkVersion,
+        __input: &[u8],
+    ) -> Result<Self, ::mavlink_core::error::ParserError> {
+        let avail_len = __input.len();
+        let mut payload_buf = [0; Self::ENCODED_LEN];
+        let mut buf = if avail_len < Self::ENCODED_LEN {
+            payload_buf[0..avail_len].copy_from_slice(__input);
+            Bytes::new(&payload_buf)
+        } else {
+            Bytes::new(__input)
+        };
+        let mut __struct = Self::default();
+        __struct.param_value = buf.get_f32_le();
+        __struct.param_count = buf.get_u16_le();
+        __struct.param_index = buf.get_u16_le();
+        let mut tmp = [0_u8; 16usize];
+        for v in &mut tmp {
+            *v = buf.get_u8();
+        }
+        __struct.param_id = CharArray::new(tmp);
+        let tmp = buf.get_u8();
+        __struct.param_type =
+            FromPrimitive::from_u8(tmp).ok_or(::mavlink_core::error::ParserError::InvalidEnum {
+                enum_type: "MavParamType",
+                value: tmp as u64,
+            })?;
+        Ok(__struct)
+    }
+    fn ser(&self, version: MavlinkVersion, bytes: &mut [u8]) -> usize {
+        let mut __tmp = BytesMut::new(bytes);
+        #[allow(clippy::absurd_extreme_comparisons)]
+        #[allow(unused_comparisons)]
+        if __tmp.remaining() < Self::ENCODED_LEN {
+            panic!(
+                "buffer is too small (need {} bytes, but got {})",
+                Self::ENCODED_LEN,
+                __tmp.remaining(),
+            )
+        }
+        __tmp.put_f32_le(self.param_value);
+        __tmp.put_u16_le(self.param_count);
+        __tmp.put_u16_le(self.param_index);
+        for val in &self.param_id {
+            __tmp.put_u8(*val);
+        }
+        __tmp.put_u8(self.param_type as u8);
+        if matches!(version, MavlinkVersion::V2) {
+            let len = __tmp.len();
+            ::mavlink_core::utils::remove_trailing_zeroes(&bytes[..len])
+        } else {
+            __tmp.len()
+        }
+    }
+}
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type"))]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[repr(u32)]
+pub enum MavMessage {
+    #[doc = "Request all parameters of this component. After this request, all                 parameters                 are emitted. The parameter microservice is documented at                 <https://mavlink.io/en/services/parameter.html>."]
+    #[doc = ""]
+    #[doc = "ID: 21"]
+    PARAM_REQUEST_LIST(PARAM_REQUEST_LIST_DATA),
+    #[doc = "value[float]. This allows to send a                 parameter to any other component (such as the GCS) without the need of previous                 knowledge of possible parameter names. Thus the same GCS can store different                 parameters                 for different autopilots. See also <https://mavlink.io/en/services/parameter.html> for                 a                 full documentation of QGroundControl and IMU code."]
+    #[doc = ""]
+    #[doc = "ID: 20"]
+    PARAM_REQUEST_READ(PARAM_REQUEST_READ_DATA),
+    #[doc = "Set a parameter value (write new value to permanent storage).                 The receiving component should acknowledge the new parameter value by broadcasting a                 PARAM_VALUE message (broadcasting ensures that multiple GCS all have an up-to-date                 list                 of all parameters). If the sending GCS did not receive a PARAM_VALUE within its                 timeout                 time, it should re-send the PARAM_SET message. The parameter microservice is                 documented                 at <https://mavlink.io/en/services/parameter.html>."]
+    #[doc = ""]
+    #[doc = "ID: 23"]
+    PARAM_SET(PARAM_SET_DATA),
+    #[doc = "Emit the value of a onboard parameter. The inclusion of param_count and                 param_index in the message allows the recipient to keep track of received parameters                 and                 allows him to re-request missing parameters after a loss or timeout. The parameter                 microservice is documented at <https://mavlink.io/en/services/parameter.html>."]
+    #[doc = ""]
+    #[doc = "ID: 22"]
+    PARAM_VALUE(PARAM_VALUE_DATA),
+}
+impl MavMessage {
+    pub const fn all_ids() -> &'static [u32] {
+        &[20u32, 21u32, 22u32, 23u32]
+    }
+}
+impl Message for MavMessage {
+    fn parse(
+        version: MavlinkVersion,
+        id: u32,
+        payload: &[u8],
+    ) -> Result<Self, ::mavlink_core::error::ParserError> {
+        match id {
+            PARAM_REQUEST_LIST_DATA::ID => {
+                PARAM_REQUEST_LIST_DATA::deser(version, payload).map(Self::PARAM_REQUEST_LIST)
+            }
+            PARAM_REQUEST_READ_DATA::ID => {
+                PARAM_REQUEST_READ_DATA::deser(version, payload).map(Self::PARAM_REQUEST_READ)
+            }
+            PARAM_SET_DATA::ID => PARAM_SET_DATA::deser(version, payload).map(Self::PARAM_SET),
+            PARAM_VALUE_DATA::ID => {
+                PARAM_VALUE_DATA::deser(version, payload).map(Self::PARAM_VALUE)
+            }
+            _ => Err(::mavlink_core::error::ParserError::UnknownMessage { id }),
+        }
+    }
+    fn message_name(&self) -> &'static str {
+        match self {
+            Self::PARAM_REQUEST_LIST(..) => PARAM_REQUEST_LIST_DATA::NAME,
+            Self::PARAM_REQUEST_READ(..) => PARAM_REQUEST_READ_DATA::NAME,
+            Self::PARAM_SET(..) => PARAM_SET_DATA::NAME,
+            Self::PARAM_VALUE(..) => PARAM_VALUE_DATA::NAME,
+        }
+    }
+    fn message_id(&self) -> u32 {
+        match self {
+            Self::PARAM_REQUEST_LIST(..) => PARAM_REQUEST_LIST_DATA::ID,
+            Self::PARAM_REQUEST_READ(..) => PARAM_REQUEST_READ_DATA::ID,
+            Self::PARAM_SET(..) => PARAM_SET_DATA::ID,
+            Self::PARAM_VALUE(..) => PARAM_VALUE_DATA::ID,
+        }
+    }
+    fn message_id_from_name(name: &str) -> Option<u32> {
+        match name {
+            PARAM_REQUEST_LIST_DATA::NAME => Some(PARAM_REQUEST_LIST_DATA::ID),
+            PARAM_REQUEST_READ_DATA::NAME => Some(PARAM_REQUEST_READ_DATA::ID),
+            PARAM_SET_DATA::NAME => Some(PARAM_SET_DATA::ID),
+            PARAM_VALUE_DATA::NAME => Some(PARAM_VALUE_DATA::ID),
+            _ => None,
+        }
+    }
+    fn default_message_from_id(id: u32) -> Option<Self> {
+        match id {
+            PARAM_REQUEST_LIST_DATA::ID => {
+                Some(Self::PARAM_REQUEST_LIST(PARAM_REQUEST_LIST_DATA::default()))
+            }
+            PARAM_REQUEST_READ_DATA::ID => {
+                Some(Self::PARAM_REQUEST_READ(PARAM_REQUEST_READ_DATA::default()))
+            }
+            PARAM_SET_DATA::ID => Some(Self::PARAM_SET(PARAM_SET_DATA::default())),
+            PARAM_VALUE_DATA::ID => Some(Self::PARAM_VALUE(PARAM_VALUE_DATA::default())),
+            _ => None,
+        }
+    }
+    #[cfg(feature = "arbitrary")]
+    fn random_message_from_id<R: rand::RngCore>(id: u32, rng: &mut R) -> Option<Self> {
+        match id {
+            PARAM_REQUEST_LIST_DATA::ID => Some(Self::PARAM_REQUEST_LIST(
+                PARAM_REQUEST_LIST_DATA::random(rng),
+            )),
+            PARAM_REQUEST_READ_DATA::ID => Some(Self::PARAM_REQUEST_READ(
+                PARAM_REQUEST_READ_DATA::random(rng),
+            )),
+            PARAM_SET_DATA::ID => Some(Self::PARAM_SET(PARAM_SET_DATA::random(rng))),
+            PARAM_VALUE_DATA::ID => Some(Self::PARAM_VALUE(PARAM_VALUE_DATA::random(rng))),
+            _ => None,
+        }
+    }
+    fn ser(&self, version: MavlinkVersion, bytes: &mut [u8]) -> usize {
+        match self {
+            Self::PARAM_REQUEST_LIST(body) => body.ser(version, bytes),
+            Self::PARAM_REQUEST_READ(body) => body.ser(version, bytes),
+            Self::PARAM_SET(body) => body.ser(version, bytes),
+            Self::PARAM_VALUE(body) => body.ser(version, bytes),
+        }
+    }
+    fn extra_crc(id: u32) -> u8 {
+        match id {
+            PARAM_REQUEST_LIST_DATA::ID => PARAM_REQUEST_LIST_DATA::EXTRA_CRC,
+            PARAM_REQUEST_READ_DATA::ID => PARAM_REQUEST_READ_DATA::EXTRA_CRC,
+            PARAM_SET_DATA::ID => PARAM_SET_DATA::EXTRA_CRC,
+            PARAM_VALUE_DATA::ID => PARAM_VALUE_DATA::EXTRA_CRC,
+            _ => 0,
+        }
+    }
+    fn target_system_id(&self) -> Option<u8> {
+        match self {
+            Self::PARAM_REQUEST_LIST(inner) => Some(inner.target_system),
+            Self::PARAM_REQUEST_READ(inner) => Some(inner.target_system),
+            Self::PARAM_SET(inner) => Some(inner.target_system),
+            _ => None,
+        }
+    }
+    fn target_component_id(&self) -> Option<u8> {
+        match self {
+            Self::PARAM_REQUEST_LIST(inner) => Some(inner.target_component),
+            Self::PARAM_REQUEST_READ(inner) => Some(inner.target_component),
+            Self::PARAM_SET(inner) => Some(inner.target_component),
+            _ => None,
+        }
+    }
+}

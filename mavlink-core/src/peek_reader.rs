@@ -17,11 +17,14 @@ use crate::embedded::Read;
 #[cfg(feature = "std")]
 use std::io::Read;
 
+#[cfg(all(doc, feature = "std"))]
+use std::io::ErrorKind;
+
 use crate::error::MessageReadError;
 
 /// A buffered/peekable reader
 ///
-/// This reader wraps a type implementing [`std::io::Read`] and adds buffering via an internal buffer.
+/// This reader wraps a type implementing [`Read`] and adds buffering via an internal buffer.
 ///
 /// It allows the user to `peek` a specified number of bytes (without consuming them),
 /// to `read` bytes (consuming them), or to `consume` them after `peek`ing.
@@ -41,7 +44,7 @@ pub struct PeekReader<R, const BUFFER_SIZE: usize = 280> {
 }
 
 impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
-    /// Instantiates a new [`PeekReader`], wrapping the provided [`std::io::Read`]er and using the default chunk size
+    /// Instantiates a new [`PeekReader`], wrapping the provided [`Read`]er and using the default chunk size
     pub fn new(reader: R) -> Self {
         Self {
             buffer: [0; BUFFER_SIZE],
@@ -54,13 +57,19 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
     /// Peeks an exact amount of bytes from the internal buffer
     ///
     /// If the internal buffer does not contain enough data, this function will read
-    /// from the underlying [`std::io::Read`]er until it does, an error occurs or no more data can be read (EOF).
-    ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    /// from the underlying [`Read`]er until it does, an error occurs or no more data can be read (EOF).
     ///
     /// This function does not consume data from the buffer, so subsequent calls to `peek` or `read` functions
     /// will still return the peeked data.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`Read`]er it is returned
+    /// - If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic when attempting to read more bytes then `BUFFER_SIZE`
     pub fn peek_exact(&mut self, amount: usize) -> Result<&[u8], MessageReadError> {
         let result = self.fetch(amount, false);
         result
@@ -69,12 +78,18 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
     /// Reads a specified amount of bytes from the internal buffer
     ///
     /// If the internal buffer does not contain enough data, this function will read
-    /// from the underlying [`std::io::Read`]er until it does, an error occurs or no more data can be read (EOF).
-    ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    /// from the underlying [`Read`]er until it does, an error occurs or no more data can be read (EOF).
     ///
     /// This function consumes the data from the buffer, unless an error occurs, in which case no data is consumed.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`Read`]er it is returned
+    /// - If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic when attempting to read more bytes then `BUFFER_SIZE`
     pub fn read_exact(&mut self, amount: usize) -> Result<&[u8], MessageReadError> {
         self.fetch(amount, true)
     }
@@ -82,12 +97,18 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
     /// Reads a byte from the internal buffer
     ///
     /// If the internal buffer does not contain enough data, this function will read
-    /// from the underlying [`std::io::Read`]er until it does, an error occurs or no more data can be read (EOF).
-    ///
-    /// If an EOF occurs and the specified amount could not be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    /// from the underlying [`Read`]er until it does, an error occurs or no more data can be read (EOF).
     ///
     /// This function consumes the data from the buffer, unless an error occurs, in which case no data is consumed.
     ///
+    /// # Errors
+    ///
+    /// - If any error occurs while reading from the underlying [`Read`]er it is returned
+    /// - If an EOF occurs before a byte could be read, this function will return an [`ErrorKind::UnexpectedEof`].
+    ///
+    /// # Panics
+    ///
+    /// Will panic if this `PeekReader`'s `BUFFER_SIZE` is 0.  
     pub fn read_u8(&mut self) -> Result<u8, MessageReadError> {
         let buf = self.read_exact(1)?;
         Ok(buf[0])
@@ -103,16 +124,16 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
         amount
     }
 
-    /// Returns an immutable reference to the underlying [`std::io::Read`]er
+    /// Returns an immutable reference to the underlying [`Read`]er
     ///
-    /// Reading directly from the underlying stream will cause data loss
+    /// Reading directly from the underlying reader will cause data loss
     pub fn reader_ref(&self) -> &R {
         &self.reader
     }
 
-    /// Returns a mutable reference to the underlying [`std::io::Read`]er
+    /// Returns a mutable reference to the underlying [`Read`]er
     ///
-    /// Reading directly from the underlying stream will cause data loss
+    /// Reading directly from the underlying reader will cause data loss
     pub fn reader_mut(&mut self) -> &mut R {
         &mut self.reader
     }
@@ -129,24 +150,25 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
             // the caller requested more bytes than we have buffered, fetch them from the reader
             let bytes_to_read = amount - buffered;
             assert!(bytes_to_read < BUFFER_SIZE);
-            let mut buf = [0u8; BUFFER_SIZE];
+
+            // Check if we need to compact the buffer first
+            if self.top + bytes_to_read > BUFFER_SIZE {
+                // Move unread data to the beginning of the buffer
+                self.buffer.copy_within(self.cursor..self.top, 0);
+                self.top = buffered;
+                self.cursor = 0;
+            }
+
+            // Now we can safely read directly into the buffer
+            let end_pos = self.top + bytes_to_read;
 
             // read needed bytes from reader
-            let bytes_read = self.reader.read(&mut buf[..bytes_to_read])?;
+            let bytes_read = self.reader.read(&mut self.buffer[self.top..end_pos])?;
 
             if bytes_read == 0 {
                 return Err(MessageReadError::eof());
             }
 
-            // if some bytes were read, add them to the buffer
-
-            if self.buffer.len() - self.top < bytes_read {
-                // reallocate
-                self.buffer.copy_within(self.cursor..self.top, 0);
-                self.cursor = 0;
-                self.top = buffered;
-            }
-            self.buffer[self.top..self.top + bytes_read].copy_from_slice(&buf[..bytes_read]);
             self.top += bytes_read;
         }
 
@@ -155,5 +177,47 @@ impl<R: Read, const BUFFER_SIZE: usize> PeekReader<R, BUFFER_SIZE> {
             self.cursor += amount;
         }
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(feature = "std")]
+    use std::io::Write;
+
+    #[cfg(not(feature = "std"))]
+    use embedded_io::Write;
+
+    #[test]
+    fn test_read_and_peek() {
+        let data = b"Hello, World!";
+        let mut buffer = [0u8; 280];
+
+        let mut writer: &mut [u8] = &mut buffer[..];
+        writer.write_all(data).unwrap();
+
+        let mut reader = PeekReader::<_, 280>::new(&buffer[..data.len()]);
+
+        let peeked = reader.peek_exact(5).unwrap();
+        assert_eq!(peeked, b"Hello");
+
+        let read = reader.read_exact(5).unwrap();
+        assert_eq!(read, b"Hello");
+
+        // Make sure `PeekReader::read_exact` consumed the first 5 bytes.
+        let read = reader.read_exact(8).unwrap();
+        assert_eq!(read, b", World!");
+
+        match reader.read_u8().unwrap_err() {
+            #[cfg(feature = "std")]
+            MessageReadError::Io(io_err) => {
+                assert_eq!(io_err.kind(), std::io::ErrorKind::UnexpectedEof);
+            }
+            #[cfg(not(feature = "std"))]
+            MessageReadError::Io => (),
+            _ => panic!("Expected Io error with UnexpectedEof"),
+        }
     }
 }

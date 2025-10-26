@@ -1,28 +1,9 @@
 pub mod test_shared;
 
-#[cfg(all(feature = "std", feature = "common"))]
+#[cfg(feature = "common")]
 mod test_v1_encode_decode {
+    use crate::test_shared::HEARTBEAT_V1;
     use mavlink_core::peek_reader::PeekReader;
-
-    pub const HEARTBEAT_V1: &[u8] = &[
-        mavlink::MAV_STX,
-        0x09,
-        crate::test_shared::COMMON_MSG_HEADER.sequence,
-        crate::test_shared::COMMON_MSG_HEADER.system_id,
-        crate::test_shared::COMMON_MSG_HEADER.component_id,
-        0x00,
-        0x05,
-        0x00,
-        0x00,
-        0x00,
-        0x02,
-        0x03,
-        0x59,
-        0x03,
-        0x03,
-        0x1f,
-        0x50,
-    ];
 
     #[test]
     pub fn test_read_heartbeat() {
@@ -47,7 +28,8 @@ mod test_v1_encode_decode {
 
     #[test]
     pub fn test_write_heartbeat() {
-        let mut v = vec![];
+        let mut b = [0u8; 280];
+        let mut v: &mut [u8] = &mut b;
         let heartbeat_msg = crate::test_shared::get_heartbeat_msg();
         mavlink::write_v1_msg(
             &mut v,
@@ -56,7 +38,7 @@ mod test_v1_encode_decode {
         )
         .expect("Failed to write message");
 
-        assert_eq!(&v[..], HEARTBEAT_V1);
+        assert_eq!(&b[..HEARTBEAT_V1.len()], HEARTBEAT_V1);
     }
 
     #[test]
@@ -64,7 +46,8 @@ mod test_v1_encode_decode {
     pub fn test_echo_servo_output_raw() {
         use mavlink::Message;
 
-        let mut v = vec![];
+        let mut b = [0u8; 280];
+        let mut v: &mut [u8] = &mut b;
         let send_msg = crate::test_shared::get_servo_output_raw_v1();
 
         mavlink::write_v2_msg(
@@ -74,7 +57,7 @@ mod test_v1_encode_decode {
         )
         .expect("Failed to write message");
 
-        let mut c = PeekReader::new(v.as_slice());
+        let mut c = PeekReader::new(b.as_slice());
         let (_header, recv_msg): (mavlink::MavHeader, mavlink::common::MavMessage) =
             mavlink::read_v2_msg(&mut c).expect("Failed to read");
 
@@ -103,6 +86,7 @@ mod test_v1_encode_decode {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     pub fn test_read_error() {
         use std::io::ErrorKind;
 
@@ -120,5 +104,69 @@ mod test_v1_encode_decode {
                 Err(err) => panic!("{err}"),
             }
         }
+    }
+
+    #[test]
+    #[cfg(feature = "emit-extensions")]
+    pub fn test_extensions_v1() {
+        use mavlink::common::COMMAND_ACK_DATA;
+        // test if "Extension fields are not sent when a message is encoded using the MAVLink 1 protocol" holds
+        let ack_command = COMMAND_ACK_DATA {
+            command: mavlink::common::MavCmd::MAV_CMD_NAV_WAYPOINT,
+            result: mavlink::common::MavResult::MAV_RESULT_TEMPORARILY_REJECTED,
+            progress: 2,
+            result_param2: 3,
+            target_system: 4,
+            target_component: 5,
+        };
+        let ack_msg_data = mavlink::common::MavMessage::COMMAND_ACK(ack_command);
+        let mut buf = vec![];
+        mavlink::write_v1_msg(
+            &mut buf,
+            crate::test_shared::COMMON_MSG_HEADER,
+            &ack_msg_data,
+        )
+        .unwrap();
+        // check expected len of serialized buffer
+        // expected is 1 byte STX, 5 byte header, 3 bytes for message content and 2 byte crc
+        assert_eq!(buf.len(), 1 + 5 + 3 + 2);
+
+        let mut reader = PeekReader::new(&*buf);
+        let (_, read_msg) =
+            mavlink::read_v1_msg::<mavlink::common::MavMessage, _>(&mut reader).unwrap();
+        if let mavlink::common::MavMessage::COMMAND_ACK(read_ack_command) = read_msg {
+            // chech if the deserialized message has extension fields set to 0
+            assert_eq!(
+                read_ack_command.command,
+                mavlink::common::MavCmd::MAV_CMD_NAV_WAYPOINT
+            );
+            assert_eq!(
+                read_ack_command.result,
+                mavlink::common::MavResult::MAV_RESULT_TEMPORARILY_REJECTED
+            );
+            assert_eq!(read_ack_command.progress, 0);
+            assert_eq!(read_ack_command.result_param2, 0);
+            assert_eq!(read_ack_command.target_system, 0);
+            assert_eq!(read_ack_command.target_component, 0);
+        } else {
+            panic!("Read invalid message")
+        }
+    }
+
+    #[test]
+    pub fn test_overflowing_msg_id() {
+        // test behaivior for message ids that are not valid for MAVLink 1
+        let msg_data = mavlink::common::MavMessage::SETUP_SIGNING(
+            mavlink::common::SETUP_SIGNING_DATA::default(),
+        );
+        let mut buf = vec![];
+        assert!(
+            matches!(
+                mavlink::write_v1_msg(&mut buf, crate::test_shared::COMMON_MSG_HEADER, &msg_data,),
+                Err(mavlink::error::MessageWriteError::MAVLink2Only)
+            ),
+            "Writing a message with id 256 should return an error for MAVLink 1"
+        );
+        assert!(buf.is_empty(), "No bytes should be written");
     }
 }

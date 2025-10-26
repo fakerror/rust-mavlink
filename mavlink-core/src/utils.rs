@@ -1,3 +1,5 @@
+//! Utilities for processing MAVLink messages
+
 /// Removes the trailing zeroes in the payload
 ///
 /// # Note:
@@ -7,18 +9,14 @@
 pub fn remove_trailing_zeroes(data: &[u8]) -> usize {
     let mut len = data.len();
 
-    for b in data[1..].iter().rev() {
-        if *b != 0 {
-            break;
-        }
-
+    while len > 1 && data[len - 1] == 0 {
         len -= 1;
     }
 
     len
 }
 
-/// A trait very similar to `Default` but is only implemented for the equivalent Rust types to
+/// A trait very similar to [`Default`] but is only implemented for the equivalent Rust types to
 /// `MavType`s.
 ///
 /// This is only needed because rust doesn't currently implement `Default` for arrays
@@ -36,79 +34,64 @@ impl<T: RustDefault, const N: usize> RustDefault for [T; N] {
     }
 }
 
-impl RustDefault for u8 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
+macro_rules! impl_rust_default {
+    ($($t:ty => $val:expr),* $(,)?) => {
+        $(impl RustDefault for $t {
+            #[inline(always)]
+            fn rust_default() -> Self { $val }
+        })*
+    };
+}
+
+impl_rust_default! {
+    u8 => 0,
+    i8 => 0,
+    u16 => 0,
+    i16 => 0,
+    u32 => 0,
+    i32 => 0,
+    u64 => 0,
+    i64 => 0,
+    f32 => 0.0,
+    f64 => 0.0,
+    char => '\0',
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remove_trailing_zeroes_empty_slice() {
+        remove_trailing_zeroes(&[]);
     }
 }
 
-impl RustDefault for i8 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
+#[cfg(feature = "serde")]
+pub mod nulstr {
+    use serde::de::Deserializer;
+    use serde::ser::Serializer;
+    use serde::Deserialize;
+    use std::str;
 
-impl RustDefault for u16 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
+    pub fn serialize<S, const N: usize>(value: &[u8; N], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let nul_pos = value.iter().position(|&b| b == 0).unwrap_or(N);
+        let s = str::from_utf8(&value[..nul_pos]).map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(s)
     }
-}
 
-impl RustDefault for i16 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
-
-impl RustDefault for u32 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
-
-impl RustDefault for i32 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
-
-impl RustDefault for u64 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
-
-impl RustDefault for i64 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0
-    }
-}
-
-impl RustDefault for char {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        '\0'
-    }
-}
-
-impl RustDefault for f32 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0.0
-    }
-}
-
-impl RustDefault for f64 {
-    #[inline(always)]
-    fn rust_default() -> Self {
-        0.0
+    pub fn deserialize<'de, D, const N: usize>(deserializer: D) -> Result<[u8; N], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let mut buf = [0u8; N];
+        let bytes = s.as_bytes();
+        let len = bytes.len().min(N);
+        buf[..len].copy_from_slice(&bytes[..len]);
+        Ok(buf)
     }
 }
